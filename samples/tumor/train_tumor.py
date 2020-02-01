@@ -33,7 +33,7 @@ import mrcnn.model as modellib
 from mrcnn import visualize
 from mrcnn.model import log
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+#get_ipython().run_line_magic('matplotlib', 'inline')
 
 # Directory to save logs and trained model
 MODEL_DIR = os.path.join(ROOT_DIR, "logs")
@@ -70,6 +70,7 @@ class TumorConfig(Config):
     IMAGE_MIN_DIM = 256
     IMAGE_MAX_DIM = 256
     IMAGE_CHANNEL_COUNT = 1
+    MEAN_PIXEL = 0
     IMAGE_RESIZE_MODE = 'none'
 
     # Use smaller anchors because our image and objects are small
@@ -363,8 +364,8 @@ class ShapesDataset(utils.Dataset):
         height, width: the size of the generated images.
         """
         # Add classes
-        self.add_class("shapes", 1, "liver")
-        self.add_class("shapes", 2, "tumor")
+        self.add_class("tumor", 1, "liver")
+        self.add_class("tumor", 2, "lesion")
 
         # load database
         print('loading memory map db for large dataset')
@@ -451,10 +452,10 @@ class ShapesDataset(utils.Dataset):
         """
         # Map class names to class IDs.
         class_ids = np.array([1])
-        mask =  self.y_train_one_hot[image_id,:,:,:-1]
+        mask =  self.y_train_one_hot[image_id,:,:,1:-1]
         if ( self.dbsubset['axialtumorbounds'][image_id]):
           class_ids = np.array([1,2])
-          mask =  self.y_train_one_hot[image_id,:,:,:]
+          mask =  self.y_train_one_hot[image_id,:,:,1:]
         return mask.astype(np.bool), class_ids.astype(np.int32)
 
 
@@ -765,6 +766,9 @@ elif (options.setuptestset):
 # print help
 ##########################
 else:
+  import keras
+  import tensorflow as tf
+  print("keras version: ",keras.__version__, 'TF version:',tf.__version__)
   parser.print_help()
 
 

@@ -2353,10 +2353,12 @@ class MaskRCNN():
         self.set_trainable(layers)
         self.compile(learning_rate, self.config.LEARNING_MOMENTUM)
 
+        # debugging with pdb is easier without parallel execution
+        DebugMe = False
         # Work-around for Windows: Keras fails on Windows when using
         # multiprocessing workers. See discussion here:
         # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
-        if os.name is 'nt':
+        if os.name is 'nt' or DebugMe :
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
@@ -2371,7 +2373,7 @@ class MaskRCNN():
             validation_steps=self.config.VALIDATION_STEPS,
             max_queue_size=100,
             workers=workers,
-            use_multiprocessing=True,
+            use_multiprocessing=(not DebugMe),
         )
         self.epoch = max(self.epoch, epochs)
 

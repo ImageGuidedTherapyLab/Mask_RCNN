@@ -140,6 +140,7 @@ class ShapesDataset(utils.Dataset):
         # actual images. Images are generated on the fly in load_image().
         for i in range(count):
             bg_color, shapes = self.random_image(height, width)
+            print(shapes)
             self.add_image("shapes", image_id=i, path=None,
                            width=width, height=height,
                            bg_color=bg_color, shapes=shapes)
@@ -269,7 +270,7 @@ image_ids = np.random.choice(dataset_train.image_ids, 4)
 for image_id in image_ids:
     image = dataset_train.load_image(image_id)
     mask, class_ids = dataset_train.load_mask(image_id)
-    visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
+    #visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
 
     print(image_id,image.shape, mask.shape, class_ids, dataset_train.class_names)
     imgnii = nib.Nifti1Image(image , None )

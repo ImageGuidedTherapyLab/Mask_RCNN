@@ -67,8 +67,10 @@ class TumorConfig(Config):
 
     # Use small images for faster training. Set the limits of the small side
     # the large side, and that determines the image shape.
-    IMAGE_MIN_DIM = 256
-    IMAGE_MAX_DIM = 256
+    IMAGE_MIN_DIM = 512
+    IMAGE_MAX_DIM = 512
+    # assume square image
+    assert IMAGE_MAX_DIM == IMAGE_MIN_DIM 
     IMAGE_CHANNEL_COUNT = 1
     MEAN_PIXEL = 0
     IMAGE_RESIZE_MODE = 'none'
@@ -107,9 +109,6 @@ parser.add_option( "--initialize",
 parser.add_option( "--builddb",
                   action="store_true", dest="builddb", default=False,
                   help="load all training data into npy", metavar="FILE")
-parser.add_option( "--loaddb",
-                  action="store_true", dest="loaddb", default=False,
-                  help="load all training data into RAM", metavar="FILE")
 parser.add_option( "--traintumor",
                   action="store_true", dest="traintumor", default=False,
                   help="train model for tumor segmentation", metavar="FILE")
@@ -156,7 +155,7 @@ parser.add_option( "--trainingsolver",
                   action="store", dest="trainingsolver", default='adadelta',
                   help="setup info", metavar="string")
 parser.add_option( "--databaseid",
-                  action="store", dest="databaseid", default='crc',
+                  action="store", dest="databaseid", default='dbg',
                   help="available data: hcc, crc, dbg", metavar="string")
 parser.add_option( "--trainingbatch",
                   type="int", dest="trainingbatch", default=5,
@@ -196,12 +195,6 @@ else:
 print('database file: %s sqlfile: %s dbfile: %s rootlocation: %s' % (options.globalnpfile,options.sqlitefile,options.dbfile, options.rootlocation ) )
 _globaldirectorytemplate = './%slog/%s/%s/%s/%d/%s/%03d%03d/%03d/%03d'
 _xstr = lambda s: s or ""
-#FIXME - 
-if (options.loaddb):
-   # load database
-   print('loading memory map db for large dataset')
-   #_numpydatabase = np.load(options.globalnpfile,mmap_mode='r')
-   _numpydatabase = np.load(options.globalnpfile)
 
 # build data base from CSV file
 def GetDataDictionary():
@@ -376,8 +369,11 @@ class ShapesDataset(utils.Dataset):
         self.add_class("tumor", 1, "liver")
         self.add_class("tumor", 2, "lesion")
 
-        #FIXME - 
-        numpydatabase = _numpydatabase 
+        #FIXME - can load this once ?
+        # load database
+        print('loading memory map db for large dataset')
+        #numpydatabase = np.load(options.globalnpfile,mmap_mode='r')
+        numpydatabase = np.load(options.globalnpfile)
 
         #setup kfolds
         dataidsfull= list(np.unique(numpydatabase['dataid']))
@@ -433,7 +429,7 @@ class ShapesDataset(utils.Dataset):
         for i in range(len(self.dbsubset)):
             self.add_image("tumor", image_id=self.dbsubset['dataid'][i], path=None,
                            width=config.IMAGE_MAX_DIM, height=config.IMAGE_MAX_DIM,
-                           bg_color=0, tumor=[('FIXME')])
+                           bg_color=0, tumor=[(self.dbsubset['dataid'][i],self.dbsubset['sliceid'][i])])
 
 
     def load_image(self, image_id):
@@ -492,7 +488,7 @@ elif (options.builddb):
   import skimage.transform
 
   # create  custom data frame database type
-  mydatabasetype = [('dataid', int), ('axialliverbounds',bool), ('axialtumorbounds',bool), ('imagedata','(%d,%d)int16' %(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)),('truthdata','(%d,%d)uint8' % (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM))]
+  mydatabasetype = [('dataid', int),('sliceid', int), ('axialliverbounds',bool), ('axialtumorbounds',bool), ('imagedata','(%d,%d)int16' %(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)),('truthdata','(%d,%d)uint8' % (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM))]
 
   # initialize empty dataframe
   numpydatabase = np.empty(0, dtype=mydatabasetype  )
@@ -513,7 +509,12 @@ elif (options.builddb):
     # error check
     assert numpyimage.shape[0:2] == (_globalexpectedpixel,_globalexpectedpixel)
     nslice = numpyimage.shape[2]
-    resimage=skimage.transform.resize(numpyimage,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.IMG_DTYPE)
+    if (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)  == (_globalexpectedpixel,_globalexpectedpixel):
+      print("no resizing")
+      resimage=numpyimage
+    else:
+      print("resizing image")
+      resimage=skimage.transform.resize(numpyimage,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.IMG_DTYPE)
 
     # load nifti file
     truthdata = nib.load(truthlocation )
@@ -521,7 +522,12 @@ elif (options.builddb):
     # error check
     assert numpytruth.shape[0:2] == (_globalexpectedpixel,_globalexpectedpixel)
     assert nslice  == numpytruth.shape[2]
-    restruth=skimage.transform.resize(numpytruth,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.SEG_DTYPE)
+    if (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)  == (_globalexpectedpixel,_globalexpectedpixel):
+      print("no resizing")
+      restruth=numpytruth
+    else:
+      print("resizing image")
+      restruth=skimage.transform.resize(numpytruth,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.SEG_DTYPE)
 
     # bounding box for each label
     if( np.max(restruth) ==1 ) :
@@ -542,6 +548,7 @@ elif (options.builddb):
       
       # custom data type to subset  
       datamatrix ['dataid']          = np.repeat(idrow ,nslice  ) 
+      datamatrix ['sliceid']         = np.arange(1,nslice+1)
       #datamatrix ['xbounds']      = np.repeat(boundingbox[0],nslice  ) 
       #datamatrix ['ybounds']      = np.repeat(boundingbox[1],nslice  ) 
       #datamatrix ['zbounds']      = np.repeat(boundingbox[2],nslice  ) 
@@ -582,8 +589,8 @@ elif (options.traintumor):
 
   # ensure we get the same results each time we run the code
   np.random.seed(seed=0) 
-  np.random.shuffle(dataset_train.dbsubset )
-  np.random.shuffle(dataset_val.dbsubset)
+  #np.random.shuffle(dataset_train.dbsubset )
+  #np.random.shuffle(dataset_val.dbsubset)
 
   # subset within bounding box that has liver
   totnslice = len(dataset_train.dbsubset ) + len(dataset_val.dbsubset)
@@ -602,22 +609,21 @@ elif (options.traintumor):
   image_ids = np.random.choice(dataset_train.image_ids, 20)
   print(image_ids)
   import nibabel as nib  
-  for image_id in image_ids:
-      image     = dataset_train.load_image(image_id)
-      imageinfo = dataset_train.image_reference(image_id)
-      mask, class_ids = dataset_train.load_mask(image_id)
-      print(image_id,image.shape, mask.shape, class_ids, dataset_train.class_names)
-      visualize.display_top_masks(imageinfo,np.squeeze(image), mask, class_ids, dataset_train.class_names,image_id)
-  
+  for image2did in image_ids:
+      image     = dataset_train.load_image(image2did)
+      imageinfo = dataset_train.image_reference(image2did)
+      mask, class_ids = dataset_train.load_mask(image2did)
+      print(imageinfo,image2did,image.shape, mask.shape, class_ids, dataset_train.class_names)
+      visualize.display_top_masks(np.squeeze(image), mask, class_ids, dataset_train.class_names,image2did)
       imgnii = nib.Nifti1Image(image , None )
-      imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image_id )
+      imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image2did )
       segnii = nib.Nifti1Image(mask.astype('uint8') , None )
-      segnii.to_filename( 'tmp/mask.%04d.nii.gz'  % image_id )
+      segnii.to_filename( 'tmp/mask.%04d.nii.gz'  % image2did )
 
+  raise
   # ## Create Model
   
   # In[ ]:
-  
   
   # Create model in training mode
   model = modellib.MaskRCNN(mode="training", config=config,

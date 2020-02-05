@@ -81,7 +81,9 @@ class TumorConfig(Config):
     TRAIN_ROIS_PER_IMAGE = 32
 
     # Use a small epoch since the data is simple
+    STEPS_PER_EPOCH = 1
     STEPS_PER_EPOCH = 100
+    RPN_ANCHOR_SCALES = (32, 64)
 
     # use small validation steps since the epoch is small
     VALIDATION_STEPS = 5
@@ -155,7 +157,7 @@ parser.add_option( "--trainingsolver",
                   help="setup info", metavar="string")
 parser.add_option( "--databaseid",
                   action="store", dest="databaseid", default='crc',
-                  help="available data: hcc, crc", metavar="string")
+                  help="available data: hcc, crc, dbg", metavar="string")
 parser.add_option( "--trainingbatch",
                   type="int", dest="trainingbatch", default=5,
                   help="setup info", metavar="int")
@@ -179,6 +181,7 @@ trainingdictionary = {'hcc':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestH
                       'hccvol':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumordata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
                       'hccvolnorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumornorm.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
                       'hccroinorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumorroi.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
+                      'dbg':{'dbfile':'./debugdata.csv','rootlocation':'/rsrch1/ip/jacctor/LiTS/LiTS'},
                       'crc':{'dbfile':'./crctrainingdata.csv','rootlocation':'/rsrch1/ip/jacctor/LiTS/LiTS' }}
 
 # options dependency 
@@ -193,6 +196,12 @@ else:
 print('database file: %s sqlfile: %s dbfile: %s rootlocation: %s' % (options.globalnpfile,options.sqlitefile,options.dbfile, options.rootlocation ) )
 _globaldirectorytemplate = './%slog/%s/%s/%s/%d/%s/%03d%03d/%03d/%03d'
 _xstr = lambda s: s or ""
+#FIXME - 
+if (options.loaddb):
+   # load database
+   print('loading memory map db for large dataset')
+   #_numpydatabase = np.load(options.globalnpfile,mmap_mode='r')
+   _numpydatabase = np.load(options.globalnpfile)
 
 # build data base from CSV file
 def GetDataDictionary():
@@ -367,11 +376,8 @@ class ShapesDataset(utils.Dataset):
         self.add_class("tumor", 1, "liver")
         self.add_class("tumor", 2, "lesion")
 
-        # load database
-        print('loading memory map db for large dataset')
-        #numpydatabase = np.load(options.globalnpfile,mmap_mode='r')
-        if (options.loaddb):
-           numpydatabase = np.load(options.globalnpfile)
+        #FIXME - 
+        numpydatabase = _numpydatabase 
 
         #setup kfolds
         dataidsfull= list(np.unique(numpydatabase['dataid']))
@@ -427,7 +433,7 @@ class ShapesDataset(utils.Dataset):
         for i in range(len(self.dbsubset)):
             self.add_image("tumor", image_id=self.dbsubset['dataid'][i], path=None,
                            width=config.IMAGE_MAX_DIM, height=config.IMAGE_MAX_DIM,
-                           bg_color=0, shapes=[])
+                           bg_color=0, tumor=[('FIXME')])
 
 
     def load_image(self, image_id):
@@ -437,13 +443,13 @@ class ShapesDataset(utils.Dataset):
         specs in image_info.
         """
         myimage = self.dbsubset['imagedata'][image_id]
-        return myimage[:,:,np.newaxis] 
-
+        return myimage[:,:,np.newaxis].transpose(0,1,2)
+                                      
     def image_reference(self, image_id):
         """Return the shapes data of the image."""
         info = self.image_info[image_id]
-        if info["source"] == "shapes":
-            return info["shapes"]
+        if info["source"] == "tumor":
+            return info["tumor"]
         else:
             super(self.__class__).image_reference(self, image_id)
 
@@ -456,7 +462,7 @@ class ShapesDataset(utils.Dataset):
         if ( self.dbsubset['axialtumorbounds'][image_id]):
           class_ids = np.array([1,2])
           mask =  self.y_train_one_hot[image_id,:,:,1:]
-        return mask.astype(np.bool), class_ids.astype(np.int32)
+        return mask.astype(np.bool).transpose(0,1,2), class_ids.astype(np.int32)
 
 
 # In[5]:
@@ -548,8 +554,8 @@ elif (options.builddb):
         axialtumorbounds[tumorboundingbox[2]]       = True
       datamatrix ['axialliverbounds'   ]            = axialliverbounds
       datamatrix ['axialtumorbounds'  ]             = axialtumorbounds
-      datamatrix ['imagedata']                      = resimage.transpose(2,1,0) 
-      datamatrix ['truthdata']                      = restruth.transpose(2,1,0)  
+      datamatrix ['imagedata']                      = resimage.transpose(2,1,0)
+      datamatrix ['truthdata']                      = restruth.transpose(2,1,0)
       numpydatabase = np.hstack((numpydatabase,datamatrix))
       # count total slice for QA
       totalnslice = totalnslice + nslice 
@@ -593,15 +599,16 @@ elif (options.traintumor):
   # In[6]:
   
   # Load and display random samples
-  image_ids = np.random.choice(dataset_train.image_ids, 4)
+  image_ids = np.random.choice(dataset_train.image_ids, 20)
   print(image_ids)
   import nibabel as nib  
   for image_id in image_ids:
-      image = dataset_train.load_image(image_id)
+      image     = dataset_train.load_image(image_id)
+      imageinfo = dataset_train.image_reference(image_id)
       mask, class_ids = dataset_train.load_mask(image_id)
-      #visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
-  
       print(image_id,image.shape, mask.shape, class_ids, dataset_train.class_names)
+      visualize.display_top_masks(imageinfo,np.squeeze(image), mask, class_ids, dataset_train.class_names,image_id)
+  
       imgnii = nib.Nifti1Image(image , None )
       imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image_id )
       segnii = nib.Nifti1Image(mask.astype('uint8') , None )
@@ -647,19 +654,20 @@ elif (options.traintumor):
   # In[8]:
   
   
-  # Train the head branches
-  # Passing layers="heads" freezes all layers except the head
-  # layers. You can also pass a regular expression to select
-  # which layers to train by name pattern.
-  model.train(dataset_train, dataset_val, 
-              learning_rate=config.LEARNING_RATE, 
-              epochs=1, 
-              layers='heads')
-  
+##  # Train the head branches
+##  # Passing layers="heads" freezes all layers except the head
+##  # layers. You can also pass a regular expression to select
+##  # which layers to train by name pattern.
+##  model.train(dataset_train, dataset_val, 
+##              learning_rate=config.LEARNING_RATE, 
+##              epochs=1, 
+##              layers='heads')
+##  
   
   # In[9]:
   
   
+
   # Fine tune all layers
   # Passing layers="all" trains all layers. You can also 
   # pass a regular expression to select which layers to
@@ -766,12 +774,19 @@ elif (options.setuptestset):
 # print help
 ##########################
 else:
-  import keras
-  import tensorflow as tf
+  import keras; import tensorflow as tf
   print("keras version: ",keras.__version__, 'TF version:',tf.__version__)
+  print("debug: /opt/apps/miniconda/maskrcnn/lib/python3.6/site-packages/keras/engine/training.py(1450)train_on_batch()->[566.86456, 114.579956, 168.20625, 284.07834, 0.0, 0.0]")
+  print("debug: /opt/apps/miniconda/maskrcnn/lib/python3.6/site-packages/keras/engine/training_generator.py(174)fit_generator()")
   parser.print_help()
 
 
+# print("#test rpn_bbox_loss print")
+# tf.Print(loss,[loss], "#my rpn_bbox_loss print")
+# with tf.Session() as sess:
+#     # initialize all of the variables in the session
+#     print('loss       = %f' % sess.run(loss))
+# 
 
 
 

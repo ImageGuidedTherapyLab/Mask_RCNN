@@ -33,7 +33,7 @@ import mrcnn.model as modellib
 from mrcnn import visualize
 from mrcnn.model import log
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+#get_ipython().run_line_magic('matplotlib', 'inline')
 
 # Directory to save logs and trained model
 MODEL_DIR = os.path.join(ROOT_DIR, "logs")
@@ -266,13 +266,13 @@ dataset_val.prepare()
 import nibabel as nib  
 
 # Load and display random samples
-image_ids = np.random.choice(dataset_train.image_ids, 4)
+image_ids = np.random.choice(dataset_train.image_ids, 20)
 for image_id in image_ids:
-    image = dataset_train.load_image(image_id)
+    image     = dataset_train.load_image(image_id)
     mask, class_ids = dataset_train.load_mask(image_id)
-    #visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
-
     print(image_id,image.shape, mask.shape, class_ids, dataset_train.class_names)
+    visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names,image_id)
+
     imgnii = nib.Nifti1Image(image , None )
     imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image_id )
     segnii = nib.Nifti1Image(mask.astype('uint8') , None )
@@ -393,8 +393,7 @@ log("gt_class_id", gt_class_id)
 log("gt_bbox", gt_bbox)
 log("gt_mask", gt_mask)
 
-visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, 
-                            dataset_train.class_names, figsize=(8, 8))
+#visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, dataset_train.class_names, figsize=(8, 8))
 
 
 # In[13]:
@@ -403,8 +402,7 @@ visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id,
 results = model.detect([original_image], verbose=1)
 
 r = results[0]
-visualize.display_instances(original_image, r['rois'], r['masks'], r['class_ids'], 
-                            dataset_val.class_names, r['scores'], ax=get_ax())
+#visualize.display_instances(original_image, r['rois'], r['masks'], r['class_ids'], dataset_val.class_names, r['scores'], ax=get_ax())
 
 
 # ## Evaluation

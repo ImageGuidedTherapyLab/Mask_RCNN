@@ -32,7 +32,7 @@ from mrcnn import utils
 #  Visualization
 ############################################################
 
-def display_images(images, titles=None, cols=4, cmap=None, norm=None,
+def display_images(images, image_id, titles=None, cols=4, cmap=None, norm=None,
                    interpolation=None):
     """Display the given set of images, optionally with titles.
     images: list or array of image tensors in HWC format.
@@ -53,7 +53,7 @@ def display_images(images, titles=None, cols=4, cmap=None, norm=None,
         plt.imshow(image.astype(np.uint8), cmap=cmap,
                    norm=norm, interpolation=interpolation)
         i += 1
-    plt.show()
+    plt.savefig('tmp/topmask.%05d.png' % image_id)
 
 
 def random_colors(N, bright=True):
@@ -164,7 +164,8 @@ def display_instances(image, boxes, masks, class_ids, class_names,
             ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8))
     if auto_show:
-        plt.show()
+        #plt.show()
+        plt.show(block=True)
 
 
 def display_differences(image,
@@ -279,7 +280,7 @@ def draw_box(image, box, color):
     return image
 
 
-def display_top_masks(image, mask, class_ids, class_names, limit=4):
+def display_top_masks(image, mask, class_ids, class_names, image_id,limit=4):
     """Display the given image and the top few class masks."""
     to_display = []
     titles = []
@@ -299,7 +300,7 @@ def display_top_masks(image, mask, class_ids, class_names, limit=4):
         m = np.sum(m * np.arange(1, m.shape[-1] + 1), -1)
         to_display.append(m)
         titles.append(class_names[class_id] if class_id != -1 else "-")
-    display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
+    display_images(to_display,image_id,titles=titles, cols=limit + 1, cmap="Blues_r")
 
 
 def plot_precision_recall(AP, precisions, recalls):

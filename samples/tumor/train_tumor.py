@@ -63,7 +63,7 @@ class TumorConfig(Config):
     IMAGES_PER_GPU = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 2  # background + 3 shape
+    NUM_CLASSES = 1 + 1  # background +  lesion
 
     # Use small images for faster training. Set the limits of the small side
     # the large side, and that determines the image shape.
@@ -74,6 +74,7 @@ class TumorConfig(Config):
     IMAGE_CHANNEL_COUNT = 1
     MEAN_PIXEL = 0
     IMAGE_RESIZE_MODE = 'none'
+    BACKBONE = "resnet50"
 
     # Use smaller anchors because our image and objects are small
     RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)  # anchor side in pixels
@@ -86,6 +87,16 @@ class TumorConfig(Config):
     STEPS_PER_EPOCH = 1
     STEPS_PER_EPOCH = 100
     RPN_ANCHOR_SCALES = (32, 64)
+
+    # Loss weights for more precise optimization.
+    # Can be used for R-CNN training setup.
+    LOSS_WEIGHTS = {
+        "rpn_class_loss": 1.,
+        "rpn_bbox_loss": 1.,
+        "mrcnn_class_loss": 1.,
+        "mrcnn_bbox_loss": 1.,
+        "mrcnn_mask_loss": 1.
+    }
 
     # use small validation steps since the epoch is small
     VALIDATION_STEPS = 5
@@ -180,8 +191,8 @@ trainingdictionary = {'hcc':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestH
                       'hccvol':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumordata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
                       'hccvolnorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumornorm.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
                       'hccroinorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumorroi.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
-                      'dbg':{'dbfile':'./debugdata.csv','rootlocation':'/rsrch1/ip/jacctor/LiTS/LiTS'},
-                      'crc':{'dbfile':'./crctrainingdata.csv','rootlocation':'/rsrch1/ip/jacctor/LiTS/LiTS' }}
+                      'dbg':{'dbfile':'./debugdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/objectdetection'},
+                      'crc':{'dbfile':'./crctrainingdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/objectdetection' }}
 
 # options dependency 
 options.dbfile       = trainingdictionary[options.databaseid]['dbfile']
@@ -366,8 +377,7 @@ class ShapesDataset(utils.Dataset):
         height, width: the size of the generated images.
         """
         # Add classes
-        self.add_class("tumor", 1, "liver")
-        self.add_class("tumor", 2, "lesion")
+        self.add_class("tumor", 1, "lesion")
 
         #FIXME - can load this once ?
         # load database
@@ -418,14 +428,6 @@ class ShapesDataset(utils.Dataset):
         elif (idsubset =='validate'):
           self.dbsubset = numpydatabase[subsetidx_validation ]
 
-        # Convert the labels into a one-hot representation
-        from keras.utils.np_utils import to_categorical
-        
-        y_train=self.dbsubset['truthdata']
-        tvalues=y_train.astype(np.uint8)
-        t_max=np.max(tvalues)
-        print("Range of values: [0, {}]".format(t_max))
-        self.y_train_one_hot = to_categorical(tvalues, num_classes=t_max+1).reshape((y_train.shape)+(t_max+1,))
         for i in range(len(self.dbsubset)):
             self.add_image("tumor", image_id=self.dbsubset['dataid'][i], path=None,
                            width=config.IMAGE_MAX_DIM, height=config.IMAGE_MAX_DIM,
@@ -453,12 +455,22 @@ class ShapesDataset(utils.Dataset):
         """Generate instance masks for shapes of the given image ID.
         """
         # Map class names to class IDs.
-        class_ids = np.array([1])
-        mask =  self.y_train_one_hot[image_id,:,:,1:-1]
-        if ( self.dbsubset['axialtumorbounds'][image_id]):
-          class_ids = np.array([1,2])
-          mask =  self.y_train_one_hot[image_id,:,:,1:]
-        return mask.astype(np.bool).transpose(0,1,2), class_ids.astype(np.int32)
+        y_train=self.dbsubset['truthdata'][image_id]
+        tvalues=y_train.astype(np.uint8)
+        sliceclassid = np.unique(tvalues)
+        t_max=np.max(tvalues)
+        if t_max> 1 :
+          # Convert the labels into a one-hot representation
+          from keras.utils.np_utils import to_categorical
+          y_train_one_hot = to_categorical(tvalues, num_classes=t_max+1).reshape((y_train.shape)+(t_max+1,))
+          mask =  y_train_one_hot[:,:,sliceclassid[2:]]
+          class_ids = np.clip(sliceclassid[2:],None,1)
+          print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",class_ids )
+          return mask.astype(np.bool).transpose(0,1,2), class_ids.astype(np.int32)
+        else:
+          # tumor only, return empty for liver as BG
+          print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",np.empty([0], np.int32))
+          return np.empty([0, 0, 0]), np.empty([0], np.int32)
 
 
 # In[5]:
@@ -488,7 +500,7 @@ elif (options.builddb):
   import skimage.transform
 
   # create  custom data frame database type
-  mydatabasetype = [('dataid', int),('sliceid', int), ('axialliverbounds',bool), ('axialtumorbounds',bool), ('imagedata','(%d,%d)int16' %(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)),('truthdata','(%d,%d)uint8' % (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM))]
+  mydatabasetype = [('dataid', int),('sliceid', int), ('axialliverbounds',bool), ('imagedata','(%d,%d)int16' %(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)),('truthdata','(%d,%d)uint8' % (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM))]
 
   # initialize empty dataframe
   numpydatabase = np.empty(0, dtype=mydatabasetype  )
@@ -532,12 +544,10 @@ elif (options.builddb):
     # bounding box for each label
     if( np.max(restruth) ==1 ) :
       (liverboundingbox,)  = ndimage.find_objects(restruth)
-      tumorboundingbox  = None
     else:
       boundingboxes = ndimage.find_objects(restruth)
       print(boundingboxes)
       liverboundingbox = boundingboxes[0]
-      tumorboundingbox = boundingboxes[1]
 
     print(idrow, imagelocation,truthlocation, nslice )
 
@@ -555,12 +565,8 @@ elif (options.builddb):
       #datamatrix ['nslice' ]      = np.repeat(nslice,nslice  ) 
       # id the slices within the bounding box
       axialliverbounds                              = np.repeat(False,nslice  ) 
-      axialtumorbounds                              = np.repeat(False,nslice  ) 
       axialliverbounds[liverboundingbox[2]]         = True
-      if (tumorboundingbox != None):
-        axialtumorbounds[tumorboundingbox[2]]       = True
       datamatrix ['axialliverbounds'   ]            = axialliverbounds
-      datamatrix ['axialtumorbounds'  ]             = axialtumorbounds
       datamatrix ['imagedata']                      = resimage.transpose(2,1,0)
       datamatrix ['truthdata']                      = restruth.transpose(2,1,0)
       numpydatabase = np.hstack((numpydatabase,datamatrix))
@@ -614,13 +620,15 @@ elif (options.traintumor):
       imageinfo = dataset_train.image_reference(image2did)
       mask, class_ids = dataset_train.load_mask(image2did)
       print(imageinfo,image2did,image.shape, mask.shape, class_ids, dataset_train.class_names)
-      visualize.display_top_masks(np.squeeze(image), mask, class_ids, dataset_train.class_names,image2did)
-      imgnii = nib.Nifti1Image(image , None )
-      imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image2did )
+      #visualize.display_top_masks(np.squeeze(image), mask, class_ids, dataset_train.class_names,image2did)
+      #original_image, image_meta, gt_class_id, gt_bbox, gt_mask =    modellib.load_image_gt(dataset_train, config, image2did, use_mini_mask=False)
+      #visualize.display_instances(np.repeat(original_image,3,axis=2), gt_bbox, gt_mask, gt_class_id, dataset_train.class_names, figsize=(8, 8))
+
       segnii = nib.Nifti1Image(mask.astype('uint8') , None )
       segnii.to_filename( 'tmp/mask.%04d.nii.gz'  % image2did )
+      imgnii = nib.Nifti1Image(image , None )
+      imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image2did )
 
-  raise
   # ## Create Model
   
   # In[ ]:
@@ -634,7 +642,7 @@ elif (options.traintumor):
   
   
   # Which weights to start with?
-  init_with = "none"  # imagenet, coco, or last
+  init_with = "coco"  # imagenet, coco, or last
   
   if init_with == "imagenet":
       model.load_weights(model.get_imagenet_weights(), by_name=True)
@@ -644,7 +652,7 @@ elif (options.traintumor):
       # See README for instructions to download the COCO weights
       model.load_weights(COCO_MODEL_PATH, by_name=True,
                          exclude=["mrcnn_class_logits", "mrcnn_bbox_fc", 
-                                  "mrcnn_bbox", "mrcnn_mask"])
+                                  "mrcnn_bbox", "mrcnn_mask","conv1"])
   elif init_with == "last":
       # Load the last model you trained and continue training
       model.load_weights(model.find_last(), by_name=True)
@@ -660,15 +668,15 @@ elif (options.traintumor):
   # In[8]:
   
   
-##  # Train the head branches
-##  # Passing layers="heads" freezes all layers except the head
-##  # layers. You can also pass a regular expression to select
-##  # which layers to train by name pattern.
-##  model.train(dataset_train, dataset_val, 
-##              learning_rate=config.LEARNING_RATE, 
-##              epochs=1, 
-##              layers='heads')
-##  
+  # Train the head branches
+  # Passing layers="heads" freezes all layers except the head
+  # layers. You can also pass a regular expression to select
+  # which layers to train by name pattern.
+  model.train(dataset_train, dataset_val, 
+              learning_rate=config.LEARNING_RATE/100, 
+              epochs=90, 
+              layers='heads')
+  
   
   # In[9]:
   
@@ -679,8 +687,8 @@ elif (options.traintumor):
   # pass a regular expression to select which layers to
   # train by name pattern.
   model.train(dataset_train, dataset_val, 
-              learning_rate=config.LEARNING_RATE / 10,
-              epochs=2, 
+              learning_rate=config.LEARNING_RATE / 100,
+              epochs=100, 
               layers="all")
   
   
@@ -690,7 +698,7 @@ elif (options.traintumor):
   # Save weights
   # Typically not needed because callbacks save after every epoch
   # Uncomment to save manually
-  model_path = os.path.join(MODEL_DIR, "mask_rcnn_shapes.h5")
+  model_path = os.path.join(MODEL_DIR, "mask_rcnn_tumor.h5")
   model.keras_model.save_weights(model_path)
 
 elif (options.setuptestset):

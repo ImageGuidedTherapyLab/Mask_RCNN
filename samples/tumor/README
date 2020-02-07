@@ -1,0 +1,8 @@
+python train_tumor.py --databaseid=comp --initialize     
+python train_tumor.py --databaseid=comp --setupobjtestset
+python train_tumor.py --databaseid=comp --builddb        
+make -f compstatistics.makefile models
+make -f compstatistics.makefile labels
+
+
+

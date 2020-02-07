@@ -2090,6 +2090,7 @@ class MaskRCNN():
             raise FileNotFoundError(
                 errno.ENOENT, "Could not find weight files in {}".format(dir_name))
         checkpoint = os.path.join(dir_name, checkpoints[-1])
+        print(checkpoint)
         return checkpoint
 
     def load_weights(self, filepath, by_name=False, exclude=None):

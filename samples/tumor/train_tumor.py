@@ -465,11 +465,11 @@ class ShapesDataset(utils.Dataset):
           y_train_one_hot = to_categorical(tvalues, num_classes=t_max+1).reshape((y_train.shape)+(t_max+1,))
           mask =  y_train_one_hot[:,:,sliceclassid[2:]]
           class_ids = np.clip(sliceclassid[2:],None,1)
-          print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",class_ids )
+          #print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",class_ids )
           return mask.astype(np.bool).transpose(0,1,2), class_ids.astype(np.int32)
         else:
           # tumor only, return empty for liver as BG
-          print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",np.empty([0], np.int32))
+          #print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",np.empty([0], np.int32))
           return np.empty([0, 0, 0]), np.empty([0], np.int32)
 
 
@@ -598,16 +598,16 @@ elif (options.traintumor):
   #np.random.shuffle(dataset_train.dbsubset )
   #np.random.shuffle(dataset_val.dbsubset)
 
-  # subset within bounding box that has liver
-  totnslice = len(dataset_train.dbsubset ) + len(dataset_val.dbsubset)
-  slicesplit =  len(dataset_train.dbsubset )
-  print("nslice: ",totnslice ," split: " ,slicesplit )
+  ## # subset within bounding box that has liver
+  ## totnslice = len(dataset_train.dbsubset ) + len(dataset_val.dbsubset)
+  ## slicesplit =  len(dataset_train.dbsubset )
+  ## print("nslice: ",totnslice ," split: " ,slicesplit )
 
-  # FIXME - Verify stacking indicies
-  x_train=np.vstack((dataset_train.dbsubset ['imagedata'],dataset_val.dbsubset['imagedata']))
-  y_train=np.vstack((dataset_train.dbsubset ['truthdata'],dataset_val.dbsubset['truthdata']))
-  TRAINING_SLICES      = slice(0,slicesplit)
-  VALIDATION_SLICES    = slice(slicesplit,totnslice)
+  ## # FIXME - Verify stacking indicies
+  ## x_train=np.vstack((dataset_train.dbsubset ['imagedata'],dataset_val.dbsubset['imagedata']))
+  ## y_train=np.vstack((dataset_train.dbsubset ['truthdata'],dataset_val.dbsubset['truthdata']))
+  ## TRAINING_SLICES      = slice(0,slicesplit)
+  ## VALIDATION_SLICES    = slice(slicesplit,totnslice)
 
   # In[6]:
   
@@ -621,13 +621,17 @@ elif (options.traintumor):
       mask, class_ids = dataset_train.load_mask(image2did)
       print(imageinfo,image2did,image.shape, mask.shape, class_ids, dataset_train.class_names)
       #visualize.display_top_masks(np.squeeze(image), mask, class_ids, dataset_train.class_names,image2did)
-      #original_image, image_meta, gt_class_id, gt_bbox, gt_mask =    modellib.load_image_gt(dataset_train, config, image2did, use_mini_mask=False)
+      original_image, image_meta, gt_class_id, gt_bbox, gt_mask =    modellib.load_image_gt(dataset_train, config, image2did, use_mini_mask=False)
       #visualize.display_instances(np.repeat(original_image,3,axis=2), gt_bbox, gt_mask, gt_class_id, dataset_train.class_names, figsize=(8, 8))
+      objmask = np.zeros( gt_mask.shape[0:2], dtype='uint8' )
+      for iii,idclass in enumerate(gt_class_id):
+          objmask[gt_bbox[iii][0]:gt_bbox[iii][2], gt_bbox[iii][1]:gt_bbox[iii][3] ] = 1
+          objmask = objmask + idclass*gt_mask[:,:,iii].astype('uint8')
 
-      segnii = nib.Nifti1Image(mask.astype('uint8') , None )
-      segnii.to_filename( 'tmp/mask.%04d.nii.gz'  % image2did )
+      segnii = nib.Nifti1Image(objmask.astype('uint8') , None )
+      segnii.to_filename( 'tmp/mask.%05d.nii.gz'  % image2did )
       imgnii = nib.Nifti1Image(image , None )
-      imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image2did )
+      imgnii.to_filename( 'tmp/image.%05d.nii.gz' % image2did )
 
   # ## Create Model
   
@@ -674,7 +678,7 @@ elif (options.traintumor):
   # which layers to train by name pattern.
   model.train(dataset_train, dataset_val, 
               learning_rate=config.LEARNING_RATE/100, 
-              epochs=90, 
+              epochs=100, 
               layers='heads')
   
   
@@ -688,7 +692,7 @@ elif (options.traintumor):
   # train by name pattern.
   model.train(dataset_train, dataset_val, 
               learning_rate=config.LEARNING_RATE / 100,
-              epochs=100, 
+              epochs=200, 
               layers="all")
   
   

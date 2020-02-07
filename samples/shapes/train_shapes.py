@@ -250,6 +250,7 @@ class ShapesDataset(utils.Dataset):
 # In[5]:
 
 
+np.random.seed(seed=0) 
 # Training dataset
 dataset_train = ShapesDataset()
 dataset_train.load_shapes(500, config.IMAGE_SHAPE[0], config.IMAGE_SHAPE[1])
@@ -271,9 +272,13 @@ for image_id in image_ids:
     image     = dataset_train.load_image(image_id)
     mask, class_ids = dataset_train.load_mask(image_id)
     print(image_id,image.shape, mask.shape, class_ids, dataset_train.class_names)
-    visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names,image_id)
+    #visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names,image_id)
 
     original_image, image_meta, gt_class_id, gt_bbox, gt_mask =    modellib.load_image_gt(dataset_train, config, image_id, use_mini_mask=False)
+    objmask = np.zeros( gt_mask.shape[0:2], dtype='uint8' )
+    for iii,idclass in enumerate(gt_class_id):
+        objmask[gt_bbox[iii][0]:gt_bbox[iii][2], gt_bbox[iii][1]:gt_bbox[iii][3] ] = 1
+        objmask = objmask + idclass*gt_mask[:,:,iii].astype('uint8')
 
     log("original_image", original_image)
     log("image_meta", image_meta)
@@ -281,11 +286,11 @@ for image_id in image_ids:
     log("gt_bbox", gt_bbox)
     log("gt_mask", gt_mask)
 
-    visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, dataset_train.class_names, figsize=(8, 8))
+    #visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, dataset_train.class_names, figsize=(8, 8))
 
     imgnii = nib.Nifti1Image(image , None )
     imgnii.to_filename( 'tmp/image.%04d.nii.gz' % image_id )
-    segnii = nib.Nifti1Image(mask.astype('uint8') , None )
+    segnii = nib.Nifti1Image(objmask.astype('uint8') , None )
     segnii.to_filename( 'tmp/mask.%04d.nii.gz'  % image_id )
 
 

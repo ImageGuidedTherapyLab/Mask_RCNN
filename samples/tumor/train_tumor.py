@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 # # Mask R-CNN - Train on Shapes Dataset
 # 
 # 
@@ -35,18 +32,86 @@ from mrcnn.model import log
 
 #get_ipython().run_line_magic('matplotlib', 'inline')
 
-# Directory to save logs and trained model
-MODEL_DIR = os.path.join(ROOT_DIR, "logs")
-
 # Local path to trained weights file
 COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 # Download COCO trained weights from Releases if needed
 if not os.path.exists(COCO_MODEL_PATH):
     utils.download_trained_weights(COCO_MODEL_PATH)
 
+# current datasets
+trainingdictionary = {'hcc':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/trainingdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
+                      'hccnorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/trainingnorm.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
+                      'hccvol':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumordata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
+                      'hccvolnorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumornorm.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
+                      'hccroinorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumorroi.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
+                      'dbg':{'dbfile':'./debugdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/objectdetection'},
+                      'comp':{'dbfile':'./comptrainingdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/objectdetection' }}
+
 # ## Configurations
 
 # In[2]:
+
+# setup command line parser to control execution
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option( "--initialize",
+                  action="store_true", dest="initialize", default=False,
+                  help="build initial sql file ", metavar = "BOOL")
+parser.add_option( "--builddb",
+                  action="store_true", dest="builddb", default=False,
+                  help="load all training data into npy", metavar="FILE")
+parser.add_option( "--traintumor",
+                  action="store_true", dest="traintumor", default=False,
+                  help="train model for tumor segmentation", metavar="FILE")
+parser.add_option( "--setuptestset",
+                  action="store_true", dest="setuptestset", default=False,
+                  help="cross validate test set", metavar="FILE")
+parser.add_option( "--setupobjtestset",
+                  action="store_true", dest="setupobjtestset", default=False,
+                  help="cross validate test set", metavar="FILE")
+parser.add_option( "--debug",
+                  action="store_true", dest="debug", default=False,
+                  help="compare tutorial dtype", metavar="Bool")
+parser.add_option( "--ModelID",
+                  action="store", dest="modelid", default=None,
+                  help="model id", metavar="FILE")
+parser.add_option( "--outputModelBase",
+                  action="store", dest="outputModelBase", default=None,
+                  help="output location ", metavar="Path")
+parser.add_option( "--predictmodel",
+                  action="store", dest="predictmodel", default=None,
+                  help="apply model to image", metavar="Path")
+parser.add_option( "--predictimage",
+                  action="store", dest="predictimage", default=None,
+                  help="apply model to image", metavar="Path")
+parser.add_option( "--segmentation",
+                  action="store", dest="segmentation", default=None,
+                  help="model output ", metavar="Path")
+parser.add_option( "--anonymize",
+                  action="store", dest="anonymize", default=None,
+                  help="setup info", metavar="Path")
+parser.add_option( "--trainingmodel",
+                  action="store", dest="trainingmodel", default='full',
+                  help="setup info", metavar="string")
+parser.add_option( "--trainingloss",
+                  action="store", dest="trainingloss", default='dscimg',
+                  help="setup info", metavar="string")
+parser.add_option( "--trainingsolver",
+                  action="store", dest="trainingsolver", default='SGD',
+                  help="setup info", metavar="string")
+parser.add_option( "--backbone",
+                  action="store", dest="backbone", default='resnet50',
+                  help="setup info", metavar="string")
+parser.add_option( "--databaseid",
+                  action="store", dest="databaseid", default='comp',
+                  help="available data: hcc, crc, dbg", metavar="string")
+parser.add_option( "--kfolds",
+                  type="int", dest="kfolds", default=5,
+                  help="setup info", metavar="int")
+parser.add_option( "--idfold",
+                  type="int", dest="idfold", default=0,
+                  help="setup info", metavar="int")
+(options, args) = parser.parse_args()
 
 
 class TumorConfig(Config):
@@ -74,7 +139,7 @@ class TumorConfig(Config):
     IMAGE_CHANNEL_COUNT = 1
     MEAN_PIXEL = 0
     IMAGE_RESIZE_MODE = 'none'
-    BACKBONE = "resnet50"
+    BACKBONE = options.backbone
 
     # Use smaller anchors because our image and objects are small
     RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)  # anchor side in pixels
@@ -91,7 +156,7 @@ class TumorConfig(Config):
     # Loss weights for more precise optimization.
     # Can be used for R-CNN training setup.
     LOSS_WEIGHTS = {
-        "rpn_class_loss": 1.,
+        "rpn_class_loss": 1.0,
         "rpn_bbox_loss": 1.,
         "mrcnn_class_loss": 1.,
         "mrcnn_bbox_loss": 1.,
@@ -106,106 +171,22 @@ class TumorConfig(Config):
     IMG_DTYPE = np.int16
     SEG_DTYPE = np.uint8
 
-    
+    globaldirectorytemplate = '%s/%s/%s/%s/%d/%.2e%.2e%.2e%.2e%.2e/%03d%03d/%03d/%03d'
+
 config = TumorConfig()
 config.display()
 
-
-# setup command line parser to control execution
-from optparse import OptionParser
-parser = OptionParser()
-parser.add_option( "--initialize",
-                  action="store_true", dest="initialize", default=False,
-                  help="build initial sql file ", metavar = "BOOL")
-parser.add_option( "--builddb",
-                  action="store_true", dest="builddb", default=False,
-                  help="load all training data into npy", metavar="FILE")
-parser.add_option( "--traintumor",
-                  action="store_true", dest="traintumor", default=False,
-                  help="train model for tumor segmentation", metavar="FILE")
-parser.add_option( "--setuptestset",
-                  action="store_true", dest="setuptestset", default=False,
-                  help="cross validate test set", metavar="FILE")
-parser.add_option( "--setupcrctestset",
-                  action="store_true", dest="setupcrctestset", default=False,
-                  help="cross validate test set", metavar="FILE")
-parser.add_option( "--debug",
-                  action="store_true", dest="debug", default=False,
-                  help="compare tutorial dtype", metavar="Bool")
-parser.add_option( "--ModelID",
-                  action="store", dest="modelid", default=None,
-                  help="model id", metavar="FILE")
-parser.add_option( "--outputModelBase",
-                  action="store", dest="outputModelBase", default=None,
-                  help="output location ", metavar="Path")
-parser.add_option( "--predictmodel",
-                  action="store", dest="predictmodel", default=None,
-                  help="apply model to image", metavar="Path")
-parser.add_option( "--predictimage",
-                  action="store", dest="predictimage", default=None,
-                  help="apply model to image", metavar="Path")
-parser.add_option( "--segmentation",
-                  action="store", dest="segmentation", default=None,
-                  help="model output ", metavar="Path")
-parser.add_option( "--anonymize",
-                  action="store", dest="anonymize", default=None,
-                  help="setup info", metavar="Path")
-parser.add_option( "--trainingid",
-                  action="store", dest="trainingid", default='run_a',
-                  help="setup info", metavar="Path")
-parser.add_option( "--trainingmodel",
-                  action="store", dest="trainingmodel", default='full',
-                  help="setup info", metavar="string")
-parser.add_option( "--trainingloss",
-                  action="store", dest="trainingloss", default='dscimg',
-                  help="setup info", metavar="string")
-parser.add_option( "--sampleweight",
-                  action="store", dest="sampleweight", default=None,
-                  help="setup info", metavar="string")
-parser.add_option( "--trainingsolver",
-                  action="store", dest="trainingsolver", default='adadelta',
-                  help="setup info", metavar="string")
-parser.add_option( "--databaseid",
-                  action="store", dest="databaseid", default='dbg',
-                  help="available data: hcc, crc, dbg", metavar="string")
-parser.add_option( "--trainingbatch",
-                  type="int", dest="trainingbatch", default=5,
-                  help="setup info", metavar="int")
-parser.add_option( "--validationbatch",
-                  type="int", dest="validationbatch", default=20,
-                  help="setup info", metavar="int")
-parser.add_option( "--kfolds",
-                  type="int", dest="kfolds", default=5,
-                  help="setup info", metavar="int")
-parser.add_option( "--idfold",
-                  type="int", dest="idfold", default=0,
-                  help="setup info", metavar="int")
-parser.add_option("--numepochs",
-                  type="int", dest="numepochs", default=10,
-                  help="number of epochs for training", metavar="int")
-(options, args) = parser.parse_args()
-
-# current datasets
-trainingdictionary = {'hcc':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/trainingdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
-                      'hccnorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/trainingnorm.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
-                      'hccvol':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumordata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
-                      'hccvolnorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumornorm.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
-                      'hccroinorm':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/tumorroi.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
-                      'dbg':{'dbfile':'./debugdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/objectdetection'},
-                      'crc':{'dbfile':'./crctrainingdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/objectdetection' }}
 
 # options dependency 
 options.dbfile       = trainingdictionary[options.databaseid]['dbfile']
 options.rootlocation = trainingdictionary[options.databaseid]['rootlocation']
 options.sqlitefile = options.dbfile.replace('.csv','.sqlite' )
 options.globalnpfile = options.dbfile.replace('.csv','%d.npy' % config.IMAGE_MAX_DIM)
-if options.databaseid ==  'hccroinorm':
-  _globalexpectedpixel=384
-else:
-  _globalexpectedpixel=512
 print('database file: %s sqlfile: %s dbfile: %s rootlocation: %s' % (options.globalnpfile,options.sqlitefile,options.dbfile, options.rootlocation ) )
-_globaldirectorytemplate = './%slog/%s/%s/%s/%d/%s/%03d%03d/%03d/%03d'
-_xstr = lambda s: s or ""
+
+# Directory to save logs and trained model
+MODEL_DIR = os.path.join(ROOT_DIR, "logs", config.globaldirectorytemplate % (options.databaseid,options.trainingloss,config.BACKBONE,options.trainingsolver,config.IMAGE_MAX_DIM,config.LOSS_WEIGHTS['rpn_class_loss'],config.LOSS_WEIGHTS['rpn_bbox_loss'],config.LOSS_WEIGHTS['mrcnn_class_loss'],config.LOSS_WEIGHTS['mrcnn_bbox_loss'],config.LOSS_WEIGHTS['mrcnn_mask_loss'],config.IMAGES_PER_GPU,config.VALIDATION_STEPS,options.kfolds,options.idfold) )
+print (MODEL_DIR)
 
 # build data base from CSV file
 def GetDataDictionary():
@@ -364,14 +345,13 @@ def get_ax(rows=1, cols=1, size=8):
 
 # In[4]:
 
-
 class ShapesDataset(utils.Dataset):
     """Generates the shapes synthetic dataset. The dataset consists of simple
     shapes (triangles, squares, circles) placed randomly on a blank surface.
     The images are generated on the fly. No file access required.
     """
 
-    def load_shapes(self, idsubset):
+    def load_shapes(self, idsubset,numpydatabase):
         """Generate the requested number of synthetic images.
         count: number of images to generate.
         height, width: the size of the generated images.
@@ -379,20 +359,14 @@ class ShapesDataset(utils.Dataset):
         # Add classes
         self.add_class("tumor", 1, "lesion")
 
-        #FIXME - can load this once ?
-        # load database
-        print('loading memory map db for large dataset')
-        #numpydatabase = np.load(options.globalnpfile,mmap_mode='r')
-        numpydatabase = np.load(options.globalnpfile)
-
         #setup kfolds
         dataidsfull= list(np.unique(numpydatabase['dataid']))
         (train_validation_index,test_index) = GetSetupKfolds(options.kfolds,options.idfold,dataidsfull)
 
         #break into independent training and validation sets
-        studydict = {'run_a':.9, 'run_b':.8, 'run_c':.7 }
+        trainingsplit = 0.9
         ntotaltrainval    =  len(train_validation_index)
-        trainvalsplit     =  int(studydict[options.trainingid] * ntotaltrainval   )
+        trainvalsplit     =  int(trainingsplit * ntotaltrainval   )
         train_index       =  train_validation_index[0: trainvalsplit  ]
         validation_index  =  train_validation_index[trainvalsplit:    ]
 
@@ -441,7 +415,7 @@ class ShapesDataset(utils.Dataset):
         specs in image_info.
         """
         myimage = self.dbsubset['imagedata'][image_id]
-        return myimage[:,:,np.newaxis].transpose(0,1,2)
+        return myimage[:,:,np.newaxis]
                                       
     def image_reference(self, image_id):
         """Return the shapes data of the image."""
@@ -466,131 +440,28 @@ class ShapesDataset(utils.Dataset):
           mask =  y_train_one_hot[:,:,sliceclassid[2:]]
           class_ids = np.clip(sliceclassid[2:],None,1)
           #print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",class_ids )
-          return mask.astype(np.bool).transpose(0,1,2), class_ids.astype(np.int32)
+          return mask.astype(np.bool), class_ids.astype(np.int32)
         else:
           # tumor only, return empty for liver as BG
           #print("UID:", sliceclassid,"Range of values: [0, {}]".format(t_max),"class_ids ",np.empty([0], np.int32))
           return np.empty([0, 0, 0]), np.empty([0], np.int32)
 
 
-# In[5]:
-
-
-#############################################################
-# build initial sql file 
-#############################################################
-if (options.initialize ):
-  import sqlite3
-  import pandas
-  # build new database
-  os.system('rm %s'  % options.sqlitefile )
-  tagsconn = sqlite3.connect(options.sqlitefile )
-  for sqlcmd in initializedb.split(";"):
-     tagsconn.execute(sqlcmd )
-  # load csv file
-  df = pandas.read_csv(options.dbfile,delimiter='\t')
-  df.to_sql('trainingdata', tagsconn , if_exists='append', index=False)
-
-##########################
-# preprocess database and store to disk
-##########################
-elif (options.builddb):
-  import nibabel as nib  
-  from scipy import ndimage
-  import skimage.transform
-
-  # create  custom data frame database type
-  mydatabasetype = [('dataid', int),('sliceid', int), ('axialliverbounds',bool), ('imagedata','(%d,%d)int16' %(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)),('truthdata','(%d,%d)uint8' % (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM))]
-
-  # initialize empty dataframe
-  numpydatabase = np.empty(0, dtype=mydatabasetype  )
-
-  # build data base 
-  databaseinfo = GetDataDictionary()
-
-  # load all data 
-  totalnslice = 0 
-  for idrow in databaseinfo.keys():
-    row = databaseinfo[idrow ]
-    imagelocation = '%s/%s' % (options.rootlocation,row['image'])
-    truthlocation = '%s/%s' % (options.rootlocation,row['label'])
-
-    # load nifti file
-    imagedata = nib.load(imagelocation )
-    numpyimage= imagedata.get_data().astype(config.IMG_DTYPE )
-    # error check
-    assert numpyimage.shape[0:2] == (_globalexpectedpixel,_globalexpectedpixel)
-    nslice = numpyimage.shape[2]
-    if (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)  == (_globalexpectedpixel,_globalexpectedpixel):
-      print("no resizing")
-      resimage=numpyimage
-    else:
-      print("resizing image")
-      resimage=skimage.transform.resize(numpyimage,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.IMG_DTYPE)
-
-    # load nifti file
-    truthdata = nib.load(truthlocation )
-    numpytruth= truthdata.get_data().astype(config.SEG_DTYPE)
-    # error check
-    assert numpytruth.shape[0:2] == (_globalexpectedpixel,_globalexpectedpixel)
-    assert nslice  == numpytruth.shape[2]
-    if (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)  == (_globalexpectedpixel,_globalexpectedpixel):
-      print("no resizing")
-      restruth=numpytruth
-    else:
-      print("resizing image")
-      restruth=skimage.transform.resize(numpytruth,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.SEG_DTYPE)
-
-    # bounding box for each label
-    if( np.max(restruth) ==1 ) :
-      (liverboundingbox,)  = ndimage.find_objects(restruth)
-    else:
-      boundingboxes = ndimage.find_objects(restruth)
-      print(boundingboxes)
-      liverboundingbox = boundingboxes[0]
-
-    print(idrow, imagelocation,truthlocation, nslice )
-
-    # error check
-    if( nslice  == restruth.shape[2]):
-      # custom data type to subset  
-      datamatrix = np.zeros(nslice  , dtype=mydatabasetype )
-      
-      # custom data type to subset  
-      datamatrix ['dataid']          = np.repeat(idrow ,nslice  ) 
-      datamatrix ['sliceid']         = np.arange(1,nslice+1)
-      #datamatrix ['xbounds']      = np.repeat(boundingbox[0],nslice  ) 
-      #datamatrix ['ybounds']      = np.repeat(boundingbox[1],nslice  ) 
-      #datamatrix ['zbounds']      = np.repeat(boundingbox[2],nslice  ) 
-      #datamatrix ['nslice' ]      = np.repeat(nslice,nslice  ) 
-      # id the slices within the bounding box
-      axialliverbounds                              = np.repeat(False,nslice  ) 
-      axialliverbounds[liverboundingbox[2]]         = True
-      datamatrix ['axialliverbounds'   ]            = axialliverbounds
-      datamatrix ['imagedata']                      = resimage.transpose(2,1,0)
-      datamatrix ['truthdata']                      = restruth.transpose(2,1,0)
-      numpydatabase = np.hstack((numpydatabase,datamatrix))
-      # count total slice for QA
-      totalnslice = totalnslice + nslice 
-    else:
-      print('training data error image[2] = %d , truth[2] = %d ' % (nslice,restruth.shape[2]))
-
-  # save numpy array to disk
-  np.save( options.globalnpfile,numpydatabase )
-
-##########################
-# build NN model for tumor segmentation
-##########################
-elif (options.traintumor):
+# define this as a function, variable scope will be local to the function.
+def TrainODModel():
+  # load database
+  print('loading memory map db for large dataset')
+  #npdatabase = np.load(options.globalnpfile,mmap_mode='r')
+  npdatabase = np.load(options.globalnpfile)
 
   # Training dataset
   dataset_train = ShapesDataset()
-  dataset_train.load_shapes('train')
+  dataset_train.load_shapes('train',npdatabase )
   dataset_train.prepare()
   
   # Validation dataset
   dataset_val = ShapesDataset()
-  dataset_val.load_shapes('validate')
+  dataset_val.load_shapes('validate',npdatabase )
   dataset_val.prepare()
 
   # ensure we get the same results each time we run the code
@@ -633,6 +504,7 @@ elif (options.traintumor):
       imgnii = nib.Nifti1Image(image , None )
       imgnii.to_filename( 'tmp/image.%05d.nii.gz' % image2did )
 
+  return
   # ## Create Model
   
   # In[ ]:
@@ -705,11 +577,185 @@ elif (options.traintumor):
   model_path = os.path.join(MODEL_DIR, "mask_rcnn_tumor.h5")
   model.keras_model.save_weights(model_path)
 
-elif (options.setuptestset):
+# In[5]:
+
+
+#############################################################
+# build initial sql file 
+#############################################################
+if (options.initialize ):
+  import sqlite3
+  import pandas
+  # build new database
+  os.system('rm %s'  % options.sqlitefile )
+  tagsconn = sqlite3.connect(options.sqlitefile )
+  for sqlcmd in initializedb.split(";"):
+     tagsconn.execute(sqlcmd )
+  # load csv file
+  df = pandas.read_csv(options.dbfile,delimiter='\t')
+  df.to_sql('trainingdata', tagsconn , if_exists='append', index=False)
+
+##########################
+# preprocess database and store to disk
+##########################
+elif (options.builddb):
+  import nibabel as nib  
+  from scipy import ndimage
+  import skimage.transform
+
+  # create  custom data frame database type
+  mydatabasetype = [('dataid', int),('sliceid', int), ('axialliverbounds',bool), ('imagedata','(%d,%d)int16' %(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)),('truthdata','(%d,%d)uint8' % (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM))]
+
+  # initialize empty dataframe
+  numpydatabase = np.empty(0, dtype=mydatabasetype  )
+
+  # build data base 
+  databaseinfo = GetDataDictionary()
+
+  # load all data 
+  totalnslice = 0 
+  for idrow in databaseinfo.keys():
+    row = databaseinfo[idrow ]
+    imagelocation = '%s/%s' % (options.rootlocation,row['image'])
+    truthlocation = '%s/%s' % (options.rootlocation,row['label'])
+
+    # load nifti file
+    imagedata = nib.load(imagelocation )
+    numpyimage= imagedata.get_data().astype(config.IMG_DTYPE )
+    nslice = numpyimage.shape[2]
+    if (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)  == numpyimage.shape[0:2]:
+      print("no resizing")
+      resimage=numpyimage
+    else:
+      print("resizing image")
+      resimage=skimage.transform.resize(numpyimage,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.IMG_DTYPE)
+
+    # load nifti file
+    truthdata = nib.load(truthlocation )
+    numpytruth= truthdata.get_data().astype(config.SEG_DTYPE)
+    # error check
+    assert numpytruth.shape[0:2] ==  numpyimage.shape[0:2]
+    assert nslice  == numpytruth.shape[2]
+    if (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)  == numpyimage.shape[0:2]:
+      print("no resizing")
+      restruth=numpytruth
+    else:
+      print("resizing image")
+      restruth=skimage.transform.resize(numpytruth,(config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM,nslice),order=0,mode='constant',preserve_range=True).astype(config.SEG_DTYPE)
+
+    # bounding box for each label
+    if( np.max(restruth) ==1 ) :
+      (liverboundingbox,)  = ndimage.find_objects(restruth)
+    else:
+      boundingboxes = ndimage.find_objects(restruth)
+      print(boundingboxes)
+      liverboundingbox = boundingboxes[0]
+
+    print(idrow, imagelocation,truthlocation, nslice )
+
+    # error check
+    if( nslice  == restruth.shape[2]):
+      # custom data type to subset  
+      datamatrix = np.zeros(nslice  , dtype=mydatabasetype )
+      
+      # custom data type to subset  
+      datamatrix ['dataid']          = np.repeat(idrow ,nslice  ) 
+      datamatrix ['sliceid']         = np.arange(1,nslice+1)
+      #datamatrix ['xbounds']      = np.repeat(boundingbox[0],nslice  ) 
+      #datamatrix ['ybounds']      = np.repeat(boundingbox[1],nslice  ) 
+      #datamatrix ['zbounds']      = np.repeat(boundingbox[2],nslice  ) 
+      #datamatrix ['nslice' ]      = np.repeat(nslice,nslice  ) 
+      # id the slices within the bounding box
+      axialliverbounds                              = np.repeat(False,nslice  ) 
+      axialliverbounds[liverboundingbox[2]]         = True
+      datamatrix ['axialliverbounds'   ]            = axialliverbounds
+      ## VERIFY reordering
+      ## xxx = np.random.rand(4,4,8)
+      ## yyy = np.array([xxx[:,:,iii] for iii in range(8)])
+      ## yyy.shape
+      ## (8, 4, 4)
+      ## yyy[0] - xxx[:,:,0]
+      ## array([[0., 0., 0., 0.],
+      ##        [0., 0., 0., 0.],
+      ##        [0., 0., 0., 0.],
+      ##        [0., 0., 0., 0.]])
+      datamatrix ['imagedata']                      = np.array([resimage[:,:,iii] for iii in range(nslice)])
+      datamatrix ['truthdata']                      = np.array([restruth[:,:,iii] for iii in range(nslice)])
+      numpydatabase = np.hstack((numpydatabase,datamatrix))
+      # count total slice for QA
+      totalnslice = totalnslice + nslice 
+    else:
+      print('training data error image[2] = %d , truth[2] = %d ' % (nslice,restruth.shape[2]))
+
+  # save numpy array to disk
+  np.save( options.globalnpfile,numpydatabase )
+
+##########################
+# build NN model for tumor segmentation
+##########################
+elif (options.traintumor):
+  TrainODModel()
+
+##########################
+# apply model to test set
+##########################
+elif (options.setupobjtestset):
+  # get id from setupfiles
+  databaseinfo = GetDataDictionary()
+  dataidsfull = list(databaseinfo.keys()) 
+
+  uiddictionary = {}
+  modeltargetlist = []
+  makefileoutput = '%skfold%03d.makefile' % (options.databaseid,options.kfolds) 
+  # open makefile
+  with open(makefileoutput ,'w') as fileHandle:
+      for iii in range(options.kfolds):
+        (train_set,test_set) = GetSetupKfolds(options.kfolds,iii,dataidsfull)
+        uidoutputdir= config.globaldirectorytemplate % (options.databaseid,options.trainingloss,config.BACKBONE,options.trainingsolver,config.IMAGE_MAX_DIM,config.LOSS_WEIGHTS['rpn_class_loss'],config.LOSS_WEIGHTS['rpn_bbox_loss'],config.LOSS_WEIGHTS['mrcnn_class_loss'],config.LOSS_WEIGHTS['mrcnn_bbox_loss'],config.LOSS_WEIGHTS['mrcnn_mask_loss'],config.IMAGES_PER_GPU,config.VALIDATION_STEPS,options.kfolds,iii) 
+
+        modelprereq    = '%s/tumormodelunet.json' % uidoutputdir
+        modelweights   = '%s/tumormodelunet.h5' % uidoutputdir
+        fileHandle.write('%s: \n' % modelprereq  )
+        fileHandle.write('\tpython train_tumor.py --databaseid=%s --traintumor --idfold=%d --kfolds=%d \n' % (options.databaseid,iii,options.kfolds))
+        modeltargetlist.append(modelprereq    )
+        uiddictionary[iii]=[]
+        for idtest in test_set:
+           # write target
+           imageprereq    = '$(TRAININGROOT)/%s' % databaseinfo[idtest]['image']
+           labelprereq    = '$(TRAININGROOT)/%s' % databaseinfo[idtest]['label']
+           setuptarget    = '$(WORKDIR)/%s/%s/setup' % (databaseinfo[idtest]['uid'],config.BACKBONE)
+           uiddictionary[iii].append(databaseinfo[idtest]['uid'] )
+           cvtestcmd = "python ./applymodel.py --predictimage=$< --modelpath=$(word 3, $^) --maskimage=$(word 2, $^) --segmentation=$@"  
+           fileHandle.write('%s: \n' % (setuptarget  ) )
+           fileHandle.write('\tmkdir -p   $(@D)          \n'                  )
+           fileHandle.write('\tln -snf %s $(@D)/image.nii\n' % imageprereq    )
+           fileHandle.write('\tln -snf %s $(@D)/label.nii\n' % labelprereq    )
+           fileHandle.write('\tln -snf ../../../%s $(@D)/tumormodelunet.json\n' % modelprereq  )
+           fileHandle.write('\tln -snf ../../../%s $(@D)/tumormodelunet.h5\n' % modelweights  )
+
+  # build job list
+  with open(makefileoutput , 'r') as original: datastream = original.read()
+  with open(makefileoutput , 'w') as modified:
+     modified.write( 'TRAININGROOT=%s\n' % options.rootlocation + 'SQLITEDB=%s\n' % options.sqlitefile + "models: %s \n" % ' '.join(modeltargetlist))
+     for idkey in uiddictionary.keys():
+        modified.write("UIDLIST%d=%s \n" % (idkey,' '.join(uiddictionary[idkey])))
+     modified.write("UIDLIST=%s \n" % " ".join(map(lambda x : "$(UIDLIST%d)" % x, uiddictionary.keys()))    +datastream)
+
+
+
+elif (options.predictimage):
   # ## Detection
   
   # In[11]:
-  
+  imagefile = "/rsrch1/ip/dtfuentes/objectdetection/TrainingBatch2/volume-30.nii" 
+  import nibabel as nib
+  imagepredict = nib.load(imagefile)
+  imageheader  = imagepredict.header
+  numpypredict = imagepredict.get_data().astype(config.IMG_DTYPE )
+  # error check
+  assert numpypredict.shape[0:2] == (config.IMAGE_MAX_DIM,config.IMAGE_MAX_DIM)
+  nslice = numpypredict.shape[2]
+  print('nslice = %d' % nslice)
   
   class InferenceConfig(TumorConfig):
       GPU_COUNT = 1
@@ -731,62 +777,25 @@ elif (options.setuptestset):
   print("Loading weights from ", model_path)
   model.load_weights(model_path, by_name=True)
   
-  
-  # In[12]:
-  
-  
-  # Test on a random image
-  image_id = random.choice(dataset_val.image_ids)
-  original_image, image_meta, gt_class_id, gt_bbox, gt_mask =    modellib.load_image_gt(dataset_val, inference_config, 
-                             image_id, use_mini_mask=False)
-  
-  log("original_image", original_image)
-  log("image_meta", image_meta)
-  log("gt_class_id", gt_class_id)
-  log("gt_bbox", gt_bbox)
-  log("gt_mask", gt_mask)
-  
-  visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, 
-                              dataset_train.class_names, figsize=(8, 8))
-  
-  
-  # In[13]:
-  
-  
-  results = model.detect([original_image], verbose=1)
-  
-  r = results[0]
-  visualize.display_instances(original_image, r['rois'], r['masks'], r['class_ids'], 
-                              dataset_val.class_names, r['scores'], ax=get_ax())
-  
-  
-  # ## Evaluation
-  
-  # In[14]:
-  
-  
-  # Compute VOC-Style mAP @ IoU=0.5
-  # Running on 10 images. Increase for better accuracy.
-  image_ids = np.random.choice(dataset_val.image_ids, 10)
-  APs = []
-  for image_id in image_ids:
-      # Load image and ground truth data
-      image, image_meta, gt_class_id, gt_bbox, gt_mask =        modellib.load_image_gt(dataset_val, inference_config,
-                                 image_id, use_mini_mask=False)
-      molded_images = np.expand_dims(modellib.mold_image(image, inference_config), 0)
-      # Run object detection
-      results = model.detect([image], verbose=0)
-      r = results[0]
-      # Compute AP
-      AP, precisions, recalls, overlaps =        utils.compute_ap(gt_bbox, gt_class_id, gt_mask,
-                           r["rois"], r["class_ids"], r["scores"], r['masks'])
-      APs.append(AP)
-      
-  print("mAP: ", np.mean(APs))
-  
-  
+  objmask  = np.zeros( numpypredict.shape, dtype='uint8' )
+  scoreimg = np.zeros( numpypredict.shape, dtype='float16' )
   # In[ ]:
-  
+  # FIXME - vectorize this
+  for iii in range(nslice):
+    print(iii,)
+    myimage = numpypredict[:,:,iii]
+    results = model.detect([myimage[:,:,np.newaxis] ], verbose=1)
+    myoutput = results[0]
+    for jjj,idclass in enumerate(myoutput['class_ids']):
+        scoreimg[myoutput['rois'][jjj][0]:myoutput['rois'][jjj][2], myoutput['rois'][jjj][1]:myoutput['rois'][jjj][3], iii ] = myoutput['scores'][jjj]
+        objmask[myoutput['rois'][jjj][0]:myoutput['rois'][jjj][2], myoutput['rois'][jjj][1]:myoutput['rois'][jjj][3], iii ] = 1
+        objmask[:,:,iii] = objmask[:,:,iii] + idclass*myoutput['masks'][:,:,jjj].astype('uint8')
+
+  # write out
+  segout_img = nib.Nifti1Image(objmask , None, header=imageheader)
+  segout_img.to_filename( 'objdetection.nii.gz' )
+  scrout_img = nib.Nifti1Image(scoreimg, None, header=imageheader)
+  scrout_img.to_filename( 'objscore.nii.gz' )
 
 ##########################
 # print help
@@ -796,6 +805,7 @@ else:
   print("keras version: ",keras.__version__, 'TF version:',tf.__version__)
   print("debug: /opt/apps/miniconda/maskrcnn/lib/python3.6/site-packages/keras/engine/training.py(1450)train_on_batch()->[566.86456, 114.579956, 168.20625, 284.07834, 0.0, 0.0]")
   print("debug: /opt/apps/miniconda/maskrcnn/lib/python3.6/site-packages/keras/engine/training_generator.py(174)fit_generator()")
+  dataset_test = LoadDataset()
   parser.print_help()
 
 

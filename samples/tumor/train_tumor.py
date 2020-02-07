@@ -725,7 +725,7 @@ elif (options.setupobjtestset):
            labelprereq    = '$(TRAININGROOT)/%s' % databaseinfo[idtest]['label']
            setuptarget    = '$(WORKDIR)/%s/%s/setup' % (databaseinfo[idtest]['uid'],config.BACKBONE)
            uiddictionary[iii].append(databaseinfo[idtest]['uid'] )
-           cvtestcmd = "python ./applymodel.py --predictimage=$< --modelpath=$(word 3, $^) --maskimage=$(word 2, $^) --segmentation=$@"  
+           cvtestcmd = "python ./train_tumor.py --predictimage=$< --modelpath=$(word 3, $^) --maskimage=$(word 2, $^) --segmentation=$@"  
            fileHandle.write('%s: \n' % (setuptarget  ) )
            fileHandle.write('\tmkdir -p   $(@D)          \n'                  )
            fileHandle.write('\tln -snf %s $(@D)/image.nii\n' % imageprereq    )
@@ -743,7 +743,7 @@ elif (options.setupobjtestset):
 
 
 
-elif (options.predictimage):
+elif (options.predictimage != None and options.segmentation != None and options.c3dexe != None ):
   # ## Detection
   
   # In[11]:

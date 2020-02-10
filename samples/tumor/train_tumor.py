@@ -87,6 +87,9 @@ parser.add_option( "--predictimage",
 parser.add_option( "--segmentation",
                   action="store", dest="segmentation", default=None,
                   help="model output ", metavar="Path")
+parser.add_option( "--modelpath",
+                  action="store", dest="modelpath", default=None,
+                  help="model location", metavar="Path")
 parser.add_option( "--anonymize",
                   action="store", dest="anonymize", default=None,
                   help="setup info", metavar="Path")
@@ -504,7 +507,6 @@ def TrainODModel():
       imgnii = nib.Nifti1Image(image , None )
       imgnii.to_filename( 'tmp/image.%05d.nii.gz' % image2did )
 
-  return
   # ## Create Model
   
   # In[ ]:
@@ -713,11 +715,10 @@ elif (options.setupobjtestset):
         (train_set,test_set) = GetSetupKfolds(options.kfolds,iii,dataidsfull)
         uidoutputdir= config.globaldirectorytemplate % (options.databaseid,options.trainingloss,config.BACKBONE,options.trainingsolver,config.IMAGE_MAX_DIM,config.LOSS_WEIGHTS['rpn_class_loss'],config.LOSS_WEIGHTS['rpn_bbox_loss'],config.LOSS_WEIGHTS['mrcnn_class_loss'],config.LOSS_WEIGHTS['mrcnn_bbox_loss'],config.LOSS_WEIGHTS['mrcnn_mask_loss'],config.IMAGES_PER_GPU,config.VALIDATION_STEPS,options.kfolds,iii) 
 
-        modelprereq    = '%s/tumormodelunet.json' % uidoutputdir
-        modelweights   = '%s/tumormodelunet.h5' % uidoutputdir
-        fileHandle.write('%s: \n' % modelprereq  )
+        modelweights   = '%s/mask_rcnn_tumor.h5' % uidoutputdir
+        fileHandle.write('%s: \n' % modelweights )
         fileHandle.write('\tpython train_tumor.py --databaseid=%s --traintumor --idfold=%d --kfolds=%d \n' % (options.databaseid,iii,options.kfolds))
-        modeltargetlist.append(modelprereq    )
+        modeltargetlist.append(modelweights )
         uiddictionary[iii]=[]
         for idtest in test_set:
            # write target
@@ -725,13 +726,11 @@ elif (options.setupobjtestset):
            labelprereq    = '$(TRAININGROOT)/%s' % databaseinfo[idtest]['label']
            setuptarget    = '$(WORKDIR)/%s/%s/setup' % (databaseinfo[idtest]['uid'],config.BACKBONE)
            uiddictionary[iii].append(databaseinfo[idtest]['uid'] )
-           cvtestcmd = "python ./train_tumor.py --predictimage=$< --modelpath=$(word 3, $^) --maskimage=$(word 2, $^) --segmentation=$@"  
            fileHandle.write('%s: \n' % (setuptarget  ) )
            fileHandle.write('\tmkdir -p   $(@D)          \n'                  )
            fileHandle.write('\tln -snf %s $(@D)/image.nii\n' % imageprereq    )
            fileHandle.write('\tln -snf %s $(@D)/label.nii\n' % labelprereq    )
-           fileHandle.write('\tln -snf ../../../%s $(@D)/tumormodelunet.json\n' % modelprereq  )
-           fileHandle.write('\tln -snf ../../../%s $(@D)/tumormodelunet.h5\n' % modelweights  )
+           fileHandle.write('\tln -snf ../../../../../logs/%s $(@D)/mask_rcnn_tumor.h5\n' % modelweights  )
 
   # build job list
   with open(makefileoutput , 'r') as original: datastream = original.read()
@@ -743,13 +742,12 @@ elif (options.setupobjtestset):
 
 
 
-elif (options.predictimage != None and options.segmentation != None and options.c3dexe != None ):
+elif (options.predictimage != None and options.modelpath != None and options.segmentation != None ):
   # ## Detection
   
   # In[11]:
-  imagefile = "/rsrch1/ip/dtfuentes/objectdetection/TrainingBatch2/volume-30.nii" 
   import nibabel as nib
-  imagepredict = nib.load(imagefile)
+  imagepredict = nib.load(options.predictimage)
   imageheader  = imagepredict.header
   numpypredict = imagepredict.get_data().astype(config.IMG_DTYPE )
   # error check
@@ -771,7 +769,7 @@ elif (options.predictimage != None and options.segmentation != None and options.
   # Get path to saved weights
   # Either set a specific path or find last trained weights
   # model_path = os.path.join(ROOT_DIR, ".h5 file name here")
-  model_path = model.find_last()
+  model_path = options.modelpath
   
   # Load trained weights
   print("Loading weights from ", model_path)
@@ -793,9 +791,9 @@ elif (options.predictimage != None and options.segmentation != None and options.
 
   # write out
   segout_img = nib.Nifti1Image(objmask , None, header=imageheader)
-  segout_img.to_filename( 'objdetection.nii.gz' )
+  segout_img.to_filename( options.segmentation )
   scrout_img = nib.Nifti1Image(scoreimg, None, header=imageheader)
-  scrout_img.to_filename( 'objscore.nii.gz' )
+  scrout_img.to_filename( '/'.join(options.segmentation.split('/')[:-1]) + '/objscore.nii.gz' )
 
 ##########################
 # print help

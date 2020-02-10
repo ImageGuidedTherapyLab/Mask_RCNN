@@ -1,15 +1,15 @@
 SHELL := /bin/bash
-ROOTDIR=/rsrch1/ip/dtfuentes/github/livermask
+ROOTDIR=/rsrch1/ip/dtfuentes/github/Mask_RCNN/samples/tumor
 WORKDIR=ImageDatabase
 DATADIR=$(TRAININGROOT)/datalocation/train
 -include $(ROOTDIR)/compkfold005.makefile
-setup:      $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/setup,$(UIDLIST)))  $(addprefix $(WORKDIR)/,$(addsuffix /unetRMSprop/setup,$(UIDLIST4)))
-mask:       $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/mask.nii.gz,$(UIDLIST)))
-labels:     $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/tumor.nii.gz,$(UIDLIST)))
-mrf:        $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/tumormrf.nii.gz,$(UIDLIST)))
-lstat:      $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/lstat.sql,$(UIDLIST)))
-overlap:    $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/overlap.sql,$(UIDLIST)))   $(addprefix $(WORKDIR)/,$(addsuffix /unetRMSProp/overlap.sql,$(UIDLIST4)))
-overlapmrf: $(addprefix $(WORKDIR)/,$(addsuffix /unetadadelta/overlapmrf.sql,$(UIDLIST)))
+setup:      $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/setup,$(UIDLIST)))  
+mask:       $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/mask.nii.gz,$(UIDLIST)))
+labels:     $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/objdetection.nii.gz,$(UIDLIST)))
+mrf:        $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/tumormrf.nii.gz,$(UIDLIST)))
+lstat:      $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/lstat.sql,$(UIDLIST)))
+overlap:    $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/overlap.sql,$(UIDLIST)))  
+overlapmrf: $(addprefix $(WORKDIR)/,$(addsuffix /resnet50/overlapmrf.sql,$(UIDLIST)))
 C3DEXE=/rsrch2/ip/dtfuentes/bin/c3d
 # keep tmp files
 .SECONDARY: 
@@ -18,8 +18,8 @@ $(WORKDIR)/%/mask.nii.gz:
 	mkdir -p $(@D)
 	python ./applymodel.py --predictimage=$(WORKDIR)/$*/image.nii  --segmentation=$@
 
-$(WORKDIR)/%/tumor.nii.gz: $(WORKDIR)/%/image.nii $(WORKDIR)/%/mask.nii.gz $(WORKDIR)/%/tumormodelunet.json
-	python ./applymodel.py --predictimage=$< --modelpath=$(word 3, $^) --maskimage=$(word 2, $^) --segmentation=$@
+$(WORKDIR)/%/objdetection.nii.gz: $(WORKDIR)/%/image.nii  $(WORKDIR)/%/mask_rcnn_tumor.h5
+	python ./train_tumor.py --predictimage=$< --modelpath=$(word 2, $^) --segmentation=$@
 
 ## intensity statistics
 $(WORKDIR)/%/lstat.csv: 

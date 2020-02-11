@@ -100,7 +100,7 @@ parser.add_option( "--trainingloss",
                   action="store", dest="trainingloss", default='dscimg',
                   help="setup info", metavar="string")
 parser.add_option( "--trainingsolver",
-                  action="store", dest="trainingsolver", default='SGD',
+                  action="store", dest="trainingsolver", default='adadelta',
                   help="setup info", metavar="string")
 parser.add_option( "--backbone",
                   action="store", dest="backbone", default='resnet50',
@@ -143,6 +143,7 @@ class TumorConfig(Config):
     MEAN_PIXEL = 0
     IMAGE_RESIZE_MODE = 'none'
     BACKBONE = options.backbone
+    MYOPTIMIZER = options.trainingsolver
 
     # Use smaller anchors because our image and objects are small
     RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)  # anchor side in pixels
@@ -154,7 +155,6 @@ class TumorConfig(Config):
     # Use a small epoch since the data is simple
     STEPS_PER_EPOCH = 1
     STEPS_PER_EPOCH = 100
-    RPN_ANCHOR_SCALES = (32, 64)
 
     # Loss weights for more precise optimization.
     # Can be used for R-CNN training setup.
@@ -551,7 +551,7 @@ def TrainODModel():
   # layers. You can also pass a regular expression to select
   # which layers to train by name pattern.
   model.train(dataset_train, dataset_val, 
-              learning_rate=config.LEARNING_RATE/100, 
+              learning_rate=config.LEARNING_RATE, 
               epochs=100, 
               layers='heads')
   
@@ -565,7 +565,7 @@ def TrainODModel():
   # pass a regular expression to select which layers to
   # train by name pattern.
   model.train(dataset_train, dataset_val, 
-              learning_rate=config.LEARNING_RATE / 100,
+              learning_rate=config.LEARNING_RATE,
               epochs=200, 
               layers="all")
   

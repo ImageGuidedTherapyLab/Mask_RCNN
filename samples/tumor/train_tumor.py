@@ -100,7 +100,7 @@ parser.add_option( "--trainingloss",
                   action="store", dest="trainingloss", default='dscimg',
                   help="setup info", metavar="string")
 parser.add_option( "--trainingsolver",
-                  action="store", dest="trainingsolver", default='adadelta',
+                  action="store", dest="trainingsolver", default='SGD',
                   help="setup info", metavar="string")
 parser.add_option( "--backbone",
                   action="store", dest="backbone", default='resnet50',
@@ -521,20 +521,7 @@ def TrainODModel():
   
   # Which weights to start with?
   init_with = "coco"  # imagenet, coco, or last
-  
-  if init_with == "imagenet":
-      model.load_weights(model.get_imagenet_weights(), by_name=True)
-  elif init_with == "coco":
-      # Load weights trained on MS COCO, but skip layers that
-      # are different due to the different number of classes
-      # See README for instructions to download the COCO weights
-      model.load_weights(COCO_MODEL_PATH, by_name=True,
-                         exclude=["mrcnn_class_logits", "mrcnn_bbox_fc", 
-                                  "mrcnn_bbox", "mrcnn_mask","conv1"])
-  elif init_with == "last":
-      # Load the last model you trained and continue training
-      model.load_weights(model.find_last(), by_name=True)
-  
+  init_with = "last"  # imagenet, coco, or last
   
   # ## Training
   # 
@@ -543,35 +530,38 @@ def TrainODModel():
   # 
   # 2. Fine-tune all layers. For this simple example it's not necessary, but we're including it to show the process. Simply pass `layers="all` to train all layers.
   
-  # In[8]:
+  if init_with == "imagenet":
+      model.load_weights(model.get_imagenet_weights(), by_name=True)
+      raise(" freeze backbone ?  input error")
+  elif init_with == "coco":
+      # Load weights trained on MS COCO, but skip layers that
+      # are different due to the different number of classes
+      # See README for instructions to download the COCO weights
+      model.load_weights(COCO_MODEL_PATH, by_name=True,
+                         exclude=["mrcnn_class_logits", "mrcnn_bbox_fc", 
+                                  "mrcnn_bbox", "mrcnn_mask","conv1"])
   
+      # Train the head branches
+      # Passing layers="heads" freezes all layers except the head
+      # layers. You can also pass a regular expression to select
+      # which layers to train by name pattern.
+      model.train(dataset_train, dataset_val, 
+                  learning_rate=config.LEARNING_RATE, 
+                  epochs=100, 
+                  layers='heads')
   
-  # Train the head branches
-  # Passing layers="heads" freezes all layers except the head
-  # layers. You can also pass a regular expression to select
-  # which layers to train by name pattern.
-  model.train(dataset_train, dataset_val, 
-              learning_rate=config.LEARNING_RATE, 
-              epochs=100, 
-              layers='heads')
+  elif init_with == "last":
+      # Load the last model you trained and continue training
+      model.load_weights(model.find_last(), by_name=True)
   
-  
-  # In[9]:
-  
-  
-
   # Fine tune all layers
   # Passing layers="all" trains all layers. You can also 
   # pass a regular expression to select which layers to
   # train by name pattern.
   model.train(dataset_train, dataset_val, 
-              learning_rate=config.LEARNING_RATE,
-              epochs=200, 
+              learning_rate=config.LEARNING_RATE/10.,
+              epochs=1000, 
               layers="all")
-  
-  
-  # In[10]:
-  
   
   # Save weights
   # Typically not needed because callbacks save after every epoch

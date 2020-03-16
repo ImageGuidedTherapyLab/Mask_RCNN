@@ -15,28 +15,9 @@ import math
 import re
 import time
 import numpy as np
-import cv2
+#import cv2
 import matplotlib
 import matplotlib.pyplot as plt
-
-# Root directory of the project
-ROOT_DIR = os.path.abspath("../../")
-
-# Import Mask RCNN
-sys.path.append(ROOT_DIR)  # To find local version of the library
-from mrcnn.config import Config
-from mrcnn import utils
-import mrcnn.model as modellib
-from mrcnn import visualize
-from mrcnn.model import log
-
-#get_ipython().run_line_magic('matplotlib', 'inline')
-
-# Local path to trained weights file
-COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
-# Download COCO trained weights from Releases if needed
-if not os.path.exists(COCO_MODEL_PATH):
-    utils.download_trained_weights(COCO_MODEL_PATH)
 
 # current datasets
 trainingdictionary = {'hcc':{'dbfile':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse/datalocation/trainingdata.csv','rootlocation':'/rsrch1/ip/dtfuentes/github/RandomForestHCCResponse'},
@@ -108,6 +89,9 @@ parser.add_option( "--backbone",
 parser.add_option( "--databaseid",
                   action="store", dest="databaseid", default='comp',
                   help="available data: hcc, crc, dbg", metavar="string")
+parser.add_option( "--root_dir",
+                  action="store", dest="root_dir", default=os.path.abspath("../../"),
+                  help="code directory", metavar="string")
 parser.add_option( "--kfolds",
                   type="int", dest="kfolds", default=5,
                   help="setup info", metavar="int")
@@ -115,6 +99,25 @@ parser.add_option( "--idfold",
                   type="int", dest="idfold", default=0,
                   help="setup info", metavar="int")
 (options, args) = parser.parse_args()
+
+# Root directory of the project
+ROOT_DIR = options.root_dir
+
+# Import Mask RCNN
+sys.path.append(ROOT_DIR)  # To find local version of the library
+from mrcnn.config import Config
+from mrcnn import utils
+import mrcnn.model as modellib
+from mrcnn import visualize
+from mrcnn.model import log
+
+#get_ipython().run_line_magic('matplotlib', 'inline')
+
+# Local path to trained weights file
+COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
+# Download COCO trained weights from Releases if needed
+if not os.path.exists(COCO_MODEL_PATH):
+    utils.download_trained_weights(COCO_MODEL_PATH)
 
 
 class TumorConfig(Config):
@@ -560,7 +563,7 @@ def TrainODModel():
   # train by name pattern.
   model.train(dataset_train, dataset_val, 
               learning_rate=config.LEARNING_RATE/10.,
-              epochs=1000, 
+              epochs=500, 
               layers="all")
   
   # Save weights
